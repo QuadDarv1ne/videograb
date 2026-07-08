@@ -38,11 +38,6 @@ server.log
 .DS_Store
 Thumbs.db
 
-# Database
-db/*.db
-db/*.db-journal
-prisma/*.db
-
 # Cache
 .cache/
 .eslintcache
@@ -50,8 +45,3 @@ prisma/*.db
 
 # Test
 coverage/
-
-# Z-AI internal
-.zscripts/
-tool-results/
-upload/

@@ -17,7 +17,7 @@
  */
 
 import { ExtractorError, type VideoFormat, type VideoInfo } from "./types";
-import { fetchJson, fetchText, getMeta } from "./http";
+import { fetchJson, fetchText, parseHlsAttributes } from "./http";
 
 interface RutubeApiResponse {
   id: string;
@@ -335,15 +335,4 @@ function parseHlsMaster(playlist: string, baseUrl: string): RutubeHlsMaster {
     }
   }
   return { variants };
-}
-
-function parseHlsAttributes(s: string): Record<string, string> {
-  const result: Record<string, string> = {};
-  // Простой парсер: KEY=VALUE,VALUE (без вложенных кавычек для простоты)
-  const re = /([A-Z0-9-]+)=("([^"]*)"|([^,]*))/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(s)) !== null) {
-    result[m[1]] = m[3] ?? m[4] ?? "";
-  }
-  return result;
 }

@@ -138,7 +138,7 @@ export async function extractBoosty(originalUrl: string): Promise<VideoInfo> {
     try {
       pageHtml = await fetchText(originalUrl);
     } catch {
-      // игнорируем — работаем с API
+      // игнорируем — работаем с API данными
     }
   }
 

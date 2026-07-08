@@ -24,7 +24,7 @@
  */
 
 import { ExtractorError, type VideoFormat, type VideoInfo } from "./types";
-import { fetchJson, fetchText } from "./http";
+import { fetchJson, fetchText, parseHlsAttributes, decodeHtmlEntities } from "./http";
 
 interface VkParsedId {
   oid: string;
@@ -404,18 +404,6 @@ function qualityRank(q: string): number {
   return -100;
 }
 
-function decodeHtmlEntities(s: string): string {
-  return s
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&#x27;/g, "'")
-    .replace(/&#(\d+);/g, (_, dec) => String.fromCharCode(parseInt(dec, 10)))
-    .replace(/&#x([0-9a-f]+);/gi, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
-}
-
 function parseDuration(html: string): number | undefined {
   const m = html.match(/"duration"\s*:\s*(\d+)/);
   if (m) {
@@ -586,15 +574,4 @@ function parseVkHlsMaster(playlist: string, baseUrl: string): VkHlsVariant[] {
     }
   }
   return variants;
-}
-
-function parseHlsAttributes(s: string): Record<string, string> {
-  const result: Record<string, string> = {};
-  // Парсер: KEY=VALUE или KEY="VALUE,WITH,COMMAS"
-  const re = /([A-Z0-9-]+)=("([^"]*)"|([^,]*))/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(s)) !== null) {
-    result[m[1]] = m[3] ?? m[4] ?? "";
-  }
-  return result;
 }

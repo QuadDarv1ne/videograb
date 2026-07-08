@@ -148,7 +148,6 @@ export function VideoDownloader() {
           "HLS-поток нельзя скачать одним файлом через браузер. Используйте инструменты вроде yt-dlp или ffmpeg, либо откройте поток в плеере (VLC).",
           { duration: 7000 }
         );
-        // открываем ссылку в новой вкладке
         window.open(format.url, "_blank", "noopener,noreferrer");
         return;
       }
@@ -160,55 +159,38 @@ export function VideoDownloader() {
       // Прокси-ссылка на наш /api/download
       const proxyUrl = `/api/download?filename=${encodeURIComponent(filename)}&url=${encodeURIComponent(format.url)}`;
 
-      // Инициируем скачивание
+      // Проверяем доступность прокси перед скачиванием
+      const formatKey = format.url;
       try {
-        // Используем fetch для отслеживания прогресса
-        const res = await fetch(proxyUrl);
-        if (!res.ok) {
-          throw new Error(`HTTP ${res.status}`);
+        const checkRes = await fetch(proxyUrl, { method: "HEAD" });
+        if (!checkRes.ok) {
+          throw new Error(`HTTP ${checkRes.status}`);
         }
-        const total = parseInt(res.headers.get("content-length") || "0", 10);
-        const reader = res.body?.getReader();
-        if (!reader) throw new Error("Нет тела ответа");
-
-        const chunks: Uint8Array[] = [];
-        let received = 0;
-        const formatKey = format.url;
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          if (value) {
-            chunks.push(value);
-            received += value.length;
-            if (total > 0) {
-              setDownloadProgress((p) => ({
-                ...p,
-                [formatKey]: Math.round((received / total) * 100),
-              }));
-            }
-          }
-        }
-
-        // Собираем blob и инициируем скачивание
-        const blob = new Blob(chunks as BlobPart[], {
-          type: res.headers.get("content-type") || "video/mp4",
-        });
-        const blobUrl = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = blobUrl;
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(blobUrl);
-
-        setDownloadProgress((p) => ({ ...p, [formatKey]: 100 }));
-        toast.success(`Файл «${filename}» сохранён`);
       } catch (e) {
         toast.error(`Ошибка скачивания: ${(e as Error).message}`);
-        // Fallback — открыть прямую ссылку
         window.open(proxyUrl, "_blank", "noopener,noreferrer");
+        return;
       }
+
+      // Нативное скачивание через браузер — не буферизует файл в памяти
+      setDownloadProgress((p) => ({ ...p, [formatKey]: -1 }));
+      const a = document.createElement("a");
+      a.href = proxyUrl;
+      a.download = filename;
+      a.style.display = "none";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+
+      // Показываем уведомление (прогресс отслеживает браузер)
+      toast.success(`Скачивание начато: ${filename}`);
+      setTimeout(() => {
+        setDownloadProgress((p) => {
+          const next = { ...p };
+          delete next[formatKey];
+          return next;
+        });
+      }, 3000);
     },
     [info]
   );
@@ -650,7 +632,7 @@ function FormatRow({
   isOnlyEmbed?: boolean;
 }) {
   const isStream = format.type === "stream";
-  const isDownloading = progress !== undefined && progress < 100;
+  const isDownloading = progress !== undefined && progress !== 100;
   const isDone = progress === 100;
   const isEmbed = format.ext === "html";
 
@@ -680,10 +662,14 @@ function FormatRow({
         </div>
         {isDownloading && (
           <div className="mt-1.5 h-1.5 bg-muted rounded-full overflow-hidden">
-            <div
-              className="h-full bg-primary transition-all"
-              style={{ width: `${progress}%` }}
-            />
+            {progress! > 0 ? (
+              <div
+                className="h-full bg-primary transition-all"
+                style={{ width: `${progress}%` }}
+              />
+            ) : (
+              <div className="h-full bg-primary animate-pulse w-full" />
+            )}
           </div>
         )}
       </div>
@@ -722,7 +708,7 @@ function FormatRow({
           ) : isDownloading ? (
             <>
               <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-              {progress}%
+              {progress! > 0 ? `${progress}%` : "Скачивание…"}
             </>
           ) : (
             <>

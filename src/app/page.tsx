@@ -1,6 +1,6 @@
 "use client";
 
-import { Download, Sparkles, ArrowDown } from "lucide-react";
+import { Sparkles, ArrowDown } from "lucide-react";
 import { VideoDownloader } from "@/components/video-downloader/video-downloader";
 import { PlatformInfo } from "@/components/video-downloader/platform-info";
 import { Header, Footer } from "@/components/video-downloader/layout-parts";

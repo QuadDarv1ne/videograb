@@ -21,9 +21,24 @@ const BLOCKED_HOSTS = [
   "169.254.169.254", // AWS metadata
 ];
 
+function isPrivateIp(hostname: string): boolean {
+  // IPv4 private ranges
+  if (/^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|0\.)/.test(hostname)) return true;
+  // IPv6 loopback/link-local
+  if (/^(::1|fe80:|fc|fd)/i.test(hostname)) return true;
+  // Localhost variants
+  if (hostname.endsWith(".local") || hostname.endsWith(".internal")) return true;
+  return false;
+}
+
 export async function GET(req: NextRequest) {
   const urlParam = req.nextUrl.searchParams.get("url");
-  const filename = req.nextUrl.searchParams.get("filename") || "video.mp4";
+  const rawFilename = req.nextUrl.searchParams.get("filename") || "video.mp4";
+  // Sanitize filename to prevent header injection
+  const filename = rawFilename
+    .replace(/[^\w\s.\-]/g, "_")
+    .replace(/\.{2,}/g, ".")
+    .slice(0, 200);
 
   if (!urlParam) {
     return NextResponse.json(
@@ -47,6 +62,12 @@ export async function GET(req: NextRequest) {
   if (BLOCKED_HOSTS.some((h) => host === h || host.endsWith(`.${h}`))) {
     return NextResponse.json(
       { error: "Доступ к этому хосту заблокирован" },
+      { status: 403 }
+    );
+  }
+  if (isPrivateIp(host)) {
+    return NextResponse.json(
+      { error: "Доступ к приватным сетям запрещён" },
       { status: 403 }
     );
   }
@@ -74,7 +95,6 @@ export async function GET(req: NextRequest) {
     const upstream = await fetch(targetUrl.toString(), {
       headers: upstreamHeaders,
       redirect: "follow",
-      // @ts-expect-error -- Next.js поддерживает signal
       signal: AbortSignal.timeout(280_000),
     });
 

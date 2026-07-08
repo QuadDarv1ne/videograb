@@ -185,3 +185,33 @@ export function formatBytes(bytes?: number): string {
   }
   return `${v.toFixed(v < 10 && i > 0 ? 1 : 0)} ${units[i]}`;
 }
+
+/**
+ * Парсер атрибутов HLS EXT-X-STREAM-INF строки.
+ * Поддерживает KEY=VALUE и KEY="VALUE,WITH,COMMAS".
+ */
+export function parseHlsAttributes(s: string): Record<string, string> {
+  const result: Record<string, string> = {};
+  const re = /([A-Z0-9-]+)=("([^"]*)"|([^,]*))/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(s)) !== null) {
+    result[m[1]] = m[3] ?? m[4] ?? "";
+  }
+  return result;
+}
+
+/**
+ * Декодировать HTML-сущности (&amp; &lt; &gt; &quot; &#39; &#x27; &#123; &#x7B; &nbsp;).
+ */
+export function decodeHtmlEntities(s: string): string {
+  return s
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&#x27;/g, "'")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&#(\d+);/g, (_, dec) => String.fromCharCode(parseInt(dec, 10)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
+}

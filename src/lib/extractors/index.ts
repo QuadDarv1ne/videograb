@@ -7,9 +7,6 @@ import { parseVkUrl } from "./vk";
 import { parseRutubeUrl } from "./rutube";
 import { parseBoostyUrl } from "./boosty";
 
-export { extractVk } from "./vk";
-export { extractRutube } from "./rutube";
-export { extractBoosty } from "./boosty";
 export { ExtractorError } from "./types";
 export type { VideoInfo, VideoFormat, Platform, ExtractorResult } from "./types";
 
