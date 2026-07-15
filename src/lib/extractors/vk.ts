@@ -239,7 +239,8 @@ export async function extractVk(originalUrl: string): Promise<VideoInfo> {
       if (e && typeof e === "object" && "code" in e && (e as { code: string }).code !== undefined) {
         throw e;
       }
-      console.warn("[vk] API failed, falling back to embed:", e);
+      const warnMsg = e instanceof Error ? e.message : String(e);
+      console.warn("[vk] API failed, falling back to embed:", warnMsg);
     }
   }
 

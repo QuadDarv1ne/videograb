@@ -159,20 +159,8 @@ export function VideoDownloader() {
       // Прокси-ссылка на наш /api/download
       const proxyUrl = `/api/download?filename=${encodeURIComponent(filename)}&url=${encodeURIComponent(format.url)}`;
 
-      // Проверяем доступность прокси перед скачиванием
-      const formatKey = format.url;
-      try {
-        const checkRes = await fetch(proxyUrl, { method: "HEAD" });
-        if (!checkRes.ok) {
-          throw new Error(`HTTP ${checkRes.status}`);
-        }
-      } catch (e) {
-        toast.error(`Ошибка скачивания: ${(e as Error).message}`);
-        window.open(proxyUrl, "_blank", "noopener,noreferrer");
-        return;
-      }
-
       // Нативное скачивание через браузер — не буферизует файл в памяти
+      const formatKey = format.url;
       setDownloadProgress((p) => ({ ...p, [formatKey]: -1 }));
       const a = document.createElement("a");
       a.href = proxyUrl;

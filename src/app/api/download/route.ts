@@ -28,8 +28,6 @@ const ALLOWED_HOSTS = [
   // Boosty
   "boosty.to",
   "boosto.ru",
-  // Common CDN patterns
-  "cloudflare.com",
 ];
 
 function isAllowedHost(hostname: string): boolean {
@@ -40,18 +38,25 @@ function isAllowedHost(hostname: string): boolean {
 }
 
 function isPrivateIp(hostname: string): boolean {
+  const lower = hostname.toLowerCase();
   // IPv4 private ranges
-  if (/^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|0\.)/.test(hostname)) return true;
+  if (/^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|0\.)/.test(lower)) return true;
+  // IPv4 loopback
+  if (/^127\./.test(lower)) return true;
+  // IPv4 link-local (including AWS/GCP/Azure metadata endpoint 169.254.169.254)
+  if (/^169\.254\./.test(lower)) return true;
+  // IPv4 CGNAT (Carrier-Grade NAT, 100.64.0.0/10)
+  if (/^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(lower)) return true;
   // IPv6 loopback/link-local
-  if (/^(::1|fe80:|fc|fd)/i.test(hostname)) return true;
+  if (/^(::1|fe80:|fc|fd)/i.test(lower)) return true;
   // Localhost variants
-  if (hostname.endsWith(".local") || hostname.endsWith(".internal")) return true;
+  if (lower.endsWith(".local") || lower.endsWith(".internal")) return true;
   return false;
 }
 
 /**
  * Validate a redirect URL before following it (prevents SSRF via redirect).
- * Returns true if the URL is safe to follow.
+ * Redirects are only allowed to hosts in the allowlist (same as initial URL).
  */
 function isRedirectSafe(redirectUrl: string): boolean {
   try {
@@ -60,8 +65,7 @@ function isRedirectSafe(redirectUrl: string): boolean {
     const host = u.hostname;
     if (isPrivateIp(host)) return false;
     if (isAllowedHost(host)) return true;
-    // Allow redirects to non-blocked, non-private hosts (CDNs, etc.)
-    return true;
+    return false;
   } catch {
     return false;
   }
@@ -223,10 +227,11 @@ export async function GET(req: NextRequest) {
       headers: responseHeaders,
     });
   } catch (e) {
-    console.error("[download] error:", e);
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error("[download] error:", msg);
     return NextResponse.json(
       {
-        error: `Ошибка при скачивании: ${(e as Error).message}`,
+        error: `Ошибка при скачивании: ${msg}`,
       },
       { status: 502 }
     );

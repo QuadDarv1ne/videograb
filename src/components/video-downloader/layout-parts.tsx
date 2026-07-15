@@ -11,8 +11,8 @@ function ThemeToggle() {
   // next-themes на сервере возвращает undefined; рендерим кнопку только после гидратации
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
-    // помечаем, что клиент смонтирован — отложенный setState внутри effect допускается
-    Promise.resolve().then(() => setMounted(true));
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setMounted(true);
   }, []);
 
   if (!mounted) {
