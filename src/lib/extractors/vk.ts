@@ -24,7 +24,7 @@
  */
 
 import { ExtractorError, type VideoFormat, type VideoInfo } from "./types";
-import { fetchJson, fetchText, parseHlsAttributes, decodeHtmlEntities } from "./http";
+import { fetchJson, fetchText, parseHlsAttributes, decodeHtmlEntities, getMeta } from "./http";
 
 interface VkParsedId {
   oid: string;
@@ -129,10 +129,12 @@ export async function extractVk(originalUrl: string): Promise<VideoInfo> {
       const apiData = await fetchJson<VkApiResponse>(
         `https://api.vk.com/method/video.get?` +
           `videos=${parsed.oid}_${parsed.id}&` +
-          `access_token=${accessToken}&` +
           `v=${VK_API_VERSION}`,
         {
-          headers: { Accept: "application/json" },
+          headers: {
+            Accept: "application/json",
+            Authorization: `Bearer ${accessToken}`,
+          },
         }
       );
 
@@ -234,7 +236,9 @@ export async function extractVk(originalUrl: string): Promise<VideoInfo> {
         fetchedAt: new Date().toISOString(),
       };
     } catch (e) {
-      if (e instanceof ExtractorError) throw e;
+      if (e && typeof e === "object" && "code" in e && (e as { code: string }).code !== undefined) {
+        throw e;
+      }
       console.warn("[vk] API failed, falling back to embed:", e);
     }
   }
@@ -275,7 +279,7 @@ export async function extractVk(originalUrl: string): Promise<VideoInfo> {
 
   // 3. Извлекаем metadata из JSON-блока встроенного в страницу
   const rawTitle = extractField(embedHtml, "title") ||
-    extractMeta(embedHtml, "og:title") ||
+    getMeta(embedHtml, "og:title") ||
     "";
   const title = rawTitle ? decodeHtmlEntities(rawTitle) : `VK Video ${parsed.oid}_${parsed.id}`;
 
@@ -284,8 +288,9 @@ export async function extractVk(originalUrl: string): Promise<VideoInfo> {
   // Извлекаем thumbnail из JSON: ищем "first_frame_800", "thumb", "photo"
   const thumbnail = extractThumbnail(embedHtml);
 
-  const description = extractField(embedHtml, "description")
-    ? decodeHtmlEntities(extractField(embedHtml, "description")!)
+  const rawDescription = extractField(embedHtml, "description");
+  const description = rawDescription
+    ? decodeHtmlEntities(rawDescription)
     : undefined;
 
   // 4. Извлекаем "files" объект — там MP4_1080, hls_ondemand, dash_ondemand
@@ -338,9 +343,6 @@ export async function extractVk(originalUrl: string): Promise<VideoInfo> {
         timeoutMs: 10000,
         headers: {
           Referer: "https://vk.com/",
-          "User-Agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
-            "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
         },
       });
       const variants = parseVkHlsMaster(masterPlaylist, cleanHlsUrl);
@@ -413,20 +415,6 @@ function parseDuration(html: string): number | undefined {
   return undefined;
 }
 
-function extractMeta(html: string, key: string): string | undefined {
-  const re = new RegExp(
-    `<meta[^>]+(?:property|name)=["']${key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}["'][^>]*>`,
-    "i"
-  );
-  const m = html.match(re);
-  if (m) {
-    const content = m[0].match(/content=["']([^"']*)["']/i);
-    if (content) return content[1];
-  }
-  return undefined;
-}
-
-/** Извлечь строковое поле из JSON, встроенного в HTML. */
 function extractField(html: string, key: string): string | undefined {
   const re = new RegExp(`"${key}"\\s*:\\s*"([^"]+)"`);
   const m = html.match(re);

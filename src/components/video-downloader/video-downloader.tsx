@@ -457,6 +457,7 @@ function ResultCard({
               <iframe
                 src={embedUrl}
                 className="absolute inset-0 w-full h-full border-0"
+                sandbox="allow-scripts allow-same-origin allow-popups allow-presentation"
                 allow="autoplay; encrypted-media; fullscreen; picture-in-picture; screen-wake-lock;"
                 allowFullScreen
                 referrerPolicy="strict-origin-when-cross-origin"
@@ -662,7 +663,7 @@ function FormatRow({
         </div>
         {isDownloading && (
           <div className="mt-1.5 h-1.5 bg-muted rounded-full overflow-hidden">
-            {progress! > 0 ? (
+            {progress != null && progress > 0 ? (
               <div
                 className="h-full bg-primary transition-all"
                 style={{ width: `${progress}%` }}

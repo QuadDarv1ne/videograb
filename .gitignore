@@ -45,3 +45,7 @@ Thumbs.db
 
 # Test
 coverage/
+
+# AI
+.mimocode/
+

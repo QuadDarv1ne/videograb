@@ -234,8 +234,8 @@ export async function extractRutube(originalUrl: string): Promise<VideoInfo> {
       const master = await fetchText(hlsUrl, {
         headers: { Referer: "https://rutube.ru/" },
       });
-      const parsed = parseHlsMaster(master, hlsUrl);
-      for (const v of parsed.variants) {
+      const hlsMaster = parseHlsMaster(master, hlsUrl);
+      for (const v of hlsMaster.variants) {
         if (seen.has(v.url)) continue;
         seen.add(v.url);
         const resLabel = v.resolution || guessResolution(v.bandwidth);

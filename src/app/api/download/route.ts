@@ -5,21 +5,39 @@
  * Content-Disposition: attachment, чтобы файл сохранялся, а не открывался.
  *
  * Поддерживает Range-запросы для докачки и стриминга больших файлов.
+ * Используется allowlist доверенных доменов вместо blocklist для SSRF-защиты.
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { USER_AGENT } from "@/lib/extractors/http";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 300; // 5 минут максимум
 
-const BLOCKED_HOSTS = [
-  "localhost",
-  "127.0.0.1",
-  "0.0.0.0",
-  "::1",
-  "169.254.169.254", // AWS metadata
+/** Доверенные домены для скачивания (CDN платформ + их поддомены) */
+const ALLOWED_HOSTS = [
+  // VK
+  "vk.com",
+  "vkvideo.ru",
+  "vkontakte.ru",
+  "userapi.com",
+  // Rutube
+  "rutube.ru",
+  "rutube.video",
+  "myvideo.ru",
+  // Boosty
+  "boosty.to",
+  "boosto.ru",
+  // Common CDN patterns
+  "cloudflare.com",
 ];
+
+function isAllowedHost(hostname: string): boolean {
+  const lower = hostname.toLowerCase();
+  return ALLOWED_HOSTS.some(
+    (h) => lower === h || lower.endsWith(`.${h}`)
+  );
+}
 
 function isPrivateIp(hostname: string): boolean {
   // IPv4 private ranges
@@ -29,6 +47,24 @@ function isPrivateIp(hostname: string): boolean {
   // Localhost variants
   if (hostname.endsWith(".local") || hostname.endsWith(".internal")) return true;
   return false;
+}
+
+/**
+ * Validate a redirect URL before following it (prevents SSRF via redirect).
+ * Returns true if the URL is safe to follow.
+ */
+function isRedirectSafe(redirectUrl: string): boolean {
+  try {
+    const u = new URL(redirectUrl);
+    if (u.protocol !== "http:" && u.protocol !== "https:") return false;
+    const host = u.hostname;
+    if (isPrivateIp(host)) return false;
+    if (isAllowedHost(host)) return true;
+    // Allow redirects to non-blocked, non-private hosts (CDNs, etc.)
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export async function GET(req: NextRequest) {
@@ -57,21 +93,6 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  // Защита от SSRF
-  const host = targetUrl.hostname;
-  if (BLOCKED_HOSTS.some((h) => host === h || host.endsWith(`.${h}`))) {
-    return NextResponse.json(
-      { error: "Доступ к этому хосту заблокирован" },
-      { status: 403 }
-    );
-  }
-  if (isPrivateIp(host)) {
-    return NextResponse.json(
-      { error: "Доступ к приватным сетям запрещён" },
-      { status: 403 }
-    );
-  }
-
   // Разрешаем только http/https
   if (targetUrl.protocol !== "http:" && targetUrl.protocol !== "https:") {
     return NextResponse.json(
@@ -80,28 +101,87 @@ export async function GET(req: NextRequest) {
     );
   }
 
+  // Allowlist: проверяем что URL ведёт на доверенный домен
+  if (!isAllowedHost(targetUrl.hostname)) {
+    return NextResponse.json(
+      { error: "Скачивание разрешено только с доверенных платформ (VK, Rutube, Boosty)" },
+      { status: 403 }
+    );
+  }
+
+  // Защита от SSRF (дополнительно к allowlist)
+  if (isPrivateIp(targetUrl.hostname)) {
+    return NextResponse.json(
+      { error: "Доступ к приватным сетям запрещён" },
+      { status: 403 }
+    );
+  }
+
   try {
     // Пробрасываем Range-заголовок для докачки
     const range = req.headers.get("range");
     const upstreamHeaders: Record<string, string> = {
-      "User-Agent":
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
-        "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+      "User-Agent": USER_AGENT,
       Accept: "*/*",
       Referer: targetUrl.origin + "/",
     };
     if (range) upstreamHeaders.Range = range;
 
+    // Handle redirects manually to prevent SSRF via redirect chain
     const upstream = await fetch(targetUrl.toString(), {
       headers: upstreamHeaders,
-      redirect: "follow",
+      redirect: "manual",
       signal: AbortSignal.timeout(280_000),
     });
 
-    if (!upstream.ok && upstream.status !== 206) {
+    // Follow redirects manually with validation
+    let currentUrl = targetUrl;
+    let response = upstream;
+    let redirectCount = 0;
+    const MAX_REDIRECTS = 5;
+
+    while (
+      (response.status === 301 || response.status === 302 ||
+       response.status === 303 || response.status === 307 || response.status === 308) &&
+      redirectCount < MAX_REDIRECTS
+    ) {
+      const location = response.headers.get("location");
+      if (!location) break;
+
+      let nextUrl: URL;
+      try {
+        nextUrl = new URL(location, currentUrl.toString());
+      } catch {
+        break;
+      }
+
+      if (!isRedirectSafe(nextUrl.toString())) {
+        return NextResponse.json(
+          { error: "Редирект на небезопасный адрес заблокирован" },
+          { status: 403 }
+        );
+      }
+
+      currentUrl = nextUrl;
+      const redirectHeaders: Record<string, string> = {
+        "User-Agent": USER_AGENT,
+        Accept: "*/*",
+        Referer: currentUrl.origin + "/",
+      };
+      if (range) redirectHeaders.Range = range;
+
+      response = await fetch(currentUrl.toString(), {
+        headers: redirectHeaders,
+        redirect: "manual",
+        signal: AbortSignal.timeout(280_000),
+      });
+      redirectCount++;
+    }
+
+    if (!response.ok && response.status !== 206) {
       return NextResponse.json(
         {
-          error: `Источник вернул ${upstream.status} ${upstream.statusText}`,
+          error: `Источник вернул ${response.status} ${response.statusText}`,
         },
         { status: 502 }
       );
@@ -109,7 +189,7 @@ export async function GET(req: NextRequest) {
 
     // Определяем Content-Type
     const contentType =
-      upstream.headers.get("content-type") ||
+      response.headers.get("content-type") ||
       guessContentType(filename);
 
     // Готовим заголовки ответа
@@ -117,21 +197,20 @@ export async function GET(req: NextRequest) {
       "Content-Type": contentType,
       "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`,
       "Cache-Control": "no-store",
-      "Access-Control-Allow-Origin": "*",
     };
 
     // Пробрасываем Content-Length и Content-Range
-    const contentLength = upstream.headers.get("content-length");
+    const contentLength = response.headers.get("content-length");
     if (contentLength) responseHeaders["Content-Length"] = contentLength;
-    const contentRange = upstream.headers.get("content-range");
+    const contentRange = response.headers.get("content-range");
     if (contentRange) responseHeaders["Content-Range"] = contentRange;
-    const acceptRanges = upstream.headers.get("accept-ranges");
+    const acceptRanges = response.headers.get("accept-ranges");
     if (acceptRanges) responseHeaders["Accept-Ranges"] = acceptRanges;
 
     // Статус 206 если источник вернул partial content
-    const status = upstream.status === 206 ? 206 : 200;
+    const status = response.status === 206 ? 206 : 200;
 
-    if (!upstream.body) {
+    if (!response.body) {
       return NextResponse.json(
         { error: "Источник не вернул тело ответа" },
         { status: 502 }
@@ -139,7 +218,7 @@ export async function GET(req: NextRequest) {
     }
 
     // Стримим тело
-    return new NextResponse(upstream.body, {
+    return new NextResponse(response.body, {
       status,
       headers: responseHeaders,
     });

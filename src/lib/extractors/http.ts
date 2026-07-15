@@ -3,7 +3,7 @@
  * и таймаутом. Используется всеми извлекателями.
  */
 
-const DEFAULT_UA =
+export const USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
   "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 
@@ -23,12 +23,12 @@ export async function fetchWithTimeout(
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const finalHeaders: Record<string, string> = {
-      "User-Agent": DEFAULT_UA,
+      "User-Agent": USER_AGENT,
       Accept:
         "text/html,application/xhtml+xml,application/xml;q=0.9," +
         "application/json;q=0.8,*/*;q=0.7",
       "Accept-Language": "ru-RU,ru;q=0.9,en;q=0.8",
-      ...(headers as Record<string, string>),
+      ...(headers as Record<string, string> | undefined),
     };
     const res = await fetch(url, {
       ...rest,
@@ -72,7 +72,7 @@ export async function fetchText(
 export async function fetchJson<T = unknown>(url: string, opts: FetchOptions = {}): Promise<T> {
   const res = await fetchWithTimeout(url, {
     ...opts,
-    headers: { Accept: "application/json", ...(opts.headers as Record<string, string>) },
+    headers: { Accept: "application/json", ...(opts.headers as Record<string, string> | undefined) },
   });
   if (!res.ok) {
     throw new Error(`HTTP ${res.status} ${res.statusText} for ${url}`);
@@ -85,7 +85,6 @@ export async function fetchJson<T = unknown>(url: string, opts: FetchOptions = {
  * <meta property="..."> и <meta name="...">.
  */
 export function getMeta(html: string, key: string): string | undefined {
-  // property="key"
   const reProp = new RegExp(
     `<meta[^>]+(?:property|name)=["']${escapeRegExp(key)}["'][^>]*>`,
     "i"
@@ -93,75 +92,20 @@ export function getMeta(html: string, key: string): string | undefined {
   const m1 = html.match(reProp);
   if (m1) {
     const content = m1[0].match(/content=["']([^"']*)["']/i);
-    if (content) return htmlEntityDecode(content[1]);
+    if (content) return decodeHtmlEntities(content[1]);
   }
   return undefined;
-}
-
-/**
- * Извлечь первый JSON-блок, соответствующий шаблону (для парсинга встроенных данных).
- */
-export function findJsonBlock(html: string, startPattern: string): unknown | null {
-  const idx = html.indexOf(startPattern);
-  if (idx === -1) return null;
-  // найти начало объекта
-  const startBrace = html.indexOf("{", idx);
-  if (startBrace === -1) return null;
-  // сбалансированный поиск конца
-  let depth = 0;
-  let inString = false;
-  let escape = false;
-  for (let i = startBrace; i < html.length; i++) {
-    const c = html[i];
-    if (escape) {
-      escape = false;
-      continue;
-    }
-    if (c === "\\") {
-      escape = true;
-      continue;
-    }
-    if (c === '"') {
-      inString = !inString;
-      continue;
-    }
-    if (inString) continue;
-    if (c === "{") depth++;
-    else if (c === "}") {
-      depth--;
-      if (depth === 0) {
-        const raw = html.slice(startBrace, i + 1);
-        try {
-          return JSON.parse(raw);
-        } catch {
-          return null;
-        }
-      }
-    }
-  }
-  return null;
 }
 
 function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-function htmlEntityDecode(s: string): string {
-  return s
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&#x27;/g, "'")
-    .replace(/&nbsp;/g, " ");
-}
-
 /**
  * Форматирование длительности в секундах в строку HH:MM:SS.
  */
 export function formatDuration(sec?: number): string {
-  if (!sec || sec < 0) return "—";
+  if (sec == null || sec < 0) return "—";
   const h = Math.floor(sec / 3600);
   const m = Math.floor((sec % 3600) / 60);
   const s = Math.floor(sec % 60);
@@ -175,7 +119,7 @@ export function formatDuration(sec?: number): string {
  * Преобразовать размер в байтах в читаемый формат.
  */
 export function formatBytes(bytes?: number): string {
-  if (!bytes || bytes < 0) return "—";
+  if (bytes == null || bytes < 0) return "—";
   const units = ["B", "KB", "MB", "GB"];
   let v = bytes;
   let i = 0;

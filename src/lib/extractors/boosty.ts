@@ -35,6 +35,7 @@ interface BoostyPostApiResponse {
     titleHtml?: string;
     text?: string;
   };
+  error?: string;
   result?: unknown;
 }
 
@@ -102,8 +103,8 @@ export async function extractBoosty(originalUrl: string): Promise<VideoInfo> {
   }
 
   // Если в API есть ошибка доступа
-  if (apiData && (apiData as unknown as { error?: string }).error) {
-    const errMsg = (apiData as unknown as { error: string }).error;
+  if (apiData?.error) {
+    const errMsg = apiData.error;
     if (/access|forbidden|private|paid|subscription/i.test(errMsg)) {
       throw new ExtractorError(
         "PRIVATE_CONTENT",
@@ -247,11 +248,7 @@ export async function extractBoosty(originalUrl: string): Promise<VideoInfo> {
       );
       if (oembed.thumbnail_url && !thumbnail) thumbnail = oembed.thumbnail_url;
       if (oembed.html) {
-        // извлекаем URL из iframe-embed
-        const iframeSrc = oembed.html.match(/src="([^"]+)"/);
-        if (iframeSrc) {
-          // не добавляем как скачиваемый, но можно показать
-        }
+        // oEmbed содержит embed-код, но мы не добавляем его как скачиваемый формат
       }
     } catch {
       // oEmbed опционален
