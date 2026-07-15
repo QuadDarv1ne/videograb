@@ -71,6 +71,88 @@ function isRedirectSafe(redirectUrl: string): boolean {
   }
 }
 
+export async function HEAD(req: NextRequest) {
+  const urlParam = req.nextUrl.searchParams.get("url");
+  const rawFilename = req.nextUrl.searchParams.get("filename") || "video.mp4";
+  const filename = rawFilename
+    .replace(/[^\w\s.\-]/g, "_")
+    .replace(/\.{2,}/g, ".")
+    .slice(0, 200);
+
+  if (!urlParam) {
+    return NextResponse.json(
+      { error: "Параметр url обязателен" },
+      { status: 400 }
+    );
+  }
+
+  let targetUrl: URL;
+  try {
+    targetUrl = new URL(urlParam);
+  } catch {
+    return NextResponse.json(
+      { error: "Невалидный URL для скачивания" },
+      { status: 400 }
+    );
+  }
+
+  if (targetUrl.protocol !== "http:" && targetUrl.protocol !== "https:") {
+    return NextResponse.json(
+      { error: "Поддерживаются только http/https URLs" },
+      { status: 400 }
+    );
+  }
+
+  if (!isAllowedHost(targetUrl.hostname)) {
+    return NextResponse.json(
+      { error: "Скачивание разрешено только с доверенных платформ (VK, Rutube, Boosty)" },
+      { status: 403 }
+    );
+  }
+
+  if (isPrivateIp(targetUrl.hostname)) {
+    return NextResponse.json(
+      { error: "Доступ к приватным сетям запрещён" },
+      { status: 403 }
+    );
+  }
+
+  try {
+    const upstreamHeaders: Record<string, string> = {
+      "User-Agent": USER_AGENT,
+      Accept: "*/*",
+      Referer: targetUrl.origin + "/",
+    };
+
+    const response = await fetch(targetUrl.toString(), {
+      method: "GET",
+      headers: upstreamHeaders,
+      redirect: "manual",
+      signal: AbortSignal.timeout(15_000),
+    });
+
+    const responseHeaders: Record<string, string> = {
+      "Content-Type": response.headers.get("content-type") || guessContentType(filename),
+      "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`,
+      "Cache-Control": "no-store",
+    };
+
+    const contentLength = response.headers.get("content-length");
+    if (contentLength) responseHeaders["Content-Length"] = contentLength;
+    const acceptRanges = response.headers.get("accept-ranges");
+    if (acceptRanges) responseHeaders["Accept-Ranges"] = acceptRanges;
+
+    return new NextResponse(null, { status: 200, headers: responseHeaders });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error("[download] HEAD error:", msg);
+    return NextResponse.json(
+      { error: `Ошибка проверки: ${msg}` },
+      { status: 502 }
+    );
+  }
+}
+
 export async function GET(req: NextRequest) {
   const urlParam = req.nextUrl.searchParams.get("url");
   const rawFilename = req.nextUrl.searchParams.get("filename") || "video.mp4";

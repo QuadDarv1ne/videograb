@@ -11,10 +11,13 @@ const geistSans = Geist({
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
-  subsets: ["latin"],
+  subsets: ["latin", "cyrillic"],
 });
 
+const siteUrl = "https://videograb.ru";
+
 export const metadata: Metadata = {
+  metadataBase: new URL(siteUrl),
   title: "VideoGrab — Скачивание видео из VK, Rutube, Boosty",
   description:
     "Бесплатный инструмент для скачивания видео из VK Видео, Rutube и Boosty. Вставьте ссылку — получите прямые ссылки на скачивание в разных качествах.",
@@ -35,9 +38,29 @@ export const metadata: Metadata = {
     title: "VideoGrab — Скачивание видео из VK, Rutube, Boosty",
     description:
       "Бесплатный инструмент для скачивания видео из VK Видео, Rutube и Boosty.",
+    url: siteUrl,
     siteName: "VideoGrab",
     type: "website",
     locale: "ru_RU",
+    images: [
+      {
+        url: "/og-image.png",
+        width: 1200,
+        height: 630,
+        alt: "VideoGrab",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "VideoGrab — Скачивание видео из VK, Rutube, Boosty",
+    description:
+      "Бесплатный инструмент для скачивания видео из VK Видео, Rutube и Boosty.",
+    images: ["/og-image.png"],
+  },
+  robots: {
+    index: true,
+    follow: true,
   },
 };
 

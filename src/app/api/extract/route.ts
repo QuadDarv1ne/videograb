@@ -38,11 +38,20 @@ export async function POST(req: NextRequest) {
   }
 
   // Базовая валидация URL
+  let parsedUrl: URL;
   try {
-    new URL(url);
+    parsedUrl = new URL(url);
   } catch {
     return NextResponse.json(
       { error: "Невалидный URL", code: "BAD_REQUEST" },
+      { status: 400 }
+    );
+  }
+
+  // Разрешаем только http/https
+  if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
+    return NextResponse.json(
+      { error: "Поддерживаются только http/https URLs", code: "BAD_REQUEST" },
       { status: 400 }
     );
   }

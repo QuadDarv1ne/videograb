@@ -445,10 +445,10 @@ function ResultCard({
               <iframe
                 src={embedUrl}
                 className="absolute inset-0 w-full h-full border-0"
-                sandbox="allow-scripts allow-same-origin allow-popups allow-presentation"
+                sandbox="allow-scripts allow-same-origin allow-popups allow-presentation allow-forms"
                 allow="autoplay; encrypted-media; fullscreen; picture-in-picture; screen-wake-lock;"
                 allowFullScreen
-                referrerPolicy="strict-origin-when-cross-origin"
+                    referrerPolicy="no-referrer-when-downgrade"
                 title={info.title}
               />
             ) : (

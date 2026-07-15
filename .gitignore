@@ -49,3 +49,7 @@ coverage/
 # AI
 .mimocode/
 
+# Project artifacts
+worklog.md
+tmp/
+
