@@ -15,7 +15,10 @@
 - **Предпросмотр онлайн** — встроенный iframe-плеер для просмотра видео перед скачиванием.
 - **Прокси-сервер для скачивания** — обходит CORS, поддерживает Range-запросы для докачки.
 - **Адаптивный UI** — мобильная и десктоп-версии, светлая/тёмная тема.
-- **SSRF-защита** — блокировка доступа к localhost/private IP/metadata endpoints.
+- **SSRF-защита** — allowlist доверенных доменов + DNS-резолв с проверкой всех полученных IP (защита от DNS-rebinding и доступа к приватным сетям/metadata endpoints).
+- **Rate limiting** — до 20 запросов/мин с одного IP к `POST /api/extract` (настраивается через `RATE_LIMIT_PER_MINUTE`).
+- **Security headers** — `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`, `Cross-Origin-Opener-Policy`, отключён `X-Powered-By`.
+- **SEO** — OpenGraph-картинка, sitemap.xml, robots.txt с указанием sitemap.
 
 ## Поддерживаемые форматы ссылок
 
@@ -85,6 +88,9 @@ VK_ACCESS_TOKEN=
 # Максимальная длительность API-запроса (секунды)
 # По умолчанию 30
 MAX_DURATION=30
+
+# Лимит запросов к POST /api/extract с одного IP в минуту (по умолчанию 20)
+RATE_LIMIT_PER_MINUTE=20
 ```
 
 ## Архитектура
@@ -93,10 +99,11 @@ MAX_DURATION=30
 src/
 ├── app/
 │   ├── api/
-│   │   ├── extract/route.ts      # POST — извлечение метаданных видео
-│   │   └── download/route.ts     # GET  — прокси-скачивание файла
+│   │   ├── extract/route.ts      # POST — извлечение метаданных видео (rate-limited)
+│   │   └── download/route.ts     # GET  — прокси-скачивание файла (SSRF-safe)
 │   ├── layout.tsx                # Root layout с ThemeProvider
 │   ├── page.tsx                  # Главная страница
+│   ├── sitemap.ts                # Sitemap для поисковиков
 │   └── globals.css               # Tailwind + кастомные стили
 ├── components/
 │   ├── ui/                       # shadcn/ui компоненты
@@ -112,6 +119,7 @@ src/
     │   ├── rutube.ts             # Экстрактор Rutube (API + HLS парсер)
     │   ├── boosty.ts             # Экстрактор Boosty (API)
     │   └── index.ts              # Роутер: detectPlatform + extractVideo
+    ├── rate-limit.ts             # In-memory лимитер запросов (sliding window)
     └── utils.ts                  # Утилиты shadcn
 ```
 
@@ -165,7 +173,7 @@ src/
 - `400` — `BAD_REQUEST` / `UNSUPPORTED_URL`
 - `403` — `PRIVATE_CONTENT`
 - `404` — `NOT_FOUND`
-- `429` — `RATE_LIMIT`
+- `429` — `RATE_LIMIT` (с заголовком `Retry-After`)
 - `502` — `NETWORK_ERROR` / `PARSE_ERROR`
 
 ### `GET /api/download`

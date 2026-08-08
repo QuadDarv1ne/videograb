@@ -145,10 +145,10 @@ export function VideoDownloader() {
       // Для HLS потоков скачивание напрямую не сработает — нужна ffmpeg
       if (format.ext === "m3u8") {
         toast.info(
-          "HLS-поток нельзя скачать одним файлом через браузер. Используйте инструменты вроде yt-dlp или ffmpeg, либо откройте поток в плеере (VLC).",
+          "HLS-поток нельзя скачать одним файлом через браузер. Используйте yt-dlp или ffmpeg, либо откройте поток в VLC. Прямая ссылка скопирована в буфер обмена.",
           { duration: 7000 }
         );
-        window.open(format.url, "_blank", "noopener,noreferrer");
+        await handleCopyLink(format.url);
         return;
       }
 
@@ -448,7 +448,7 @@ function ResultCard({
                 sandbox="allow-scripts allow-same-origin allow-popups allow-presentation allow-forms"
                 allow="autoplay; encrypted-media; fullscreen; picture-in-picture; screen-wake-lock;"
                 allowFullScreen
-                    referrerPolicy="no-referrer-when-downgrade"
+                referrerPolicy="no-referrer-when-downgrade"
                 title={info.title}
               />
             ) : (
@@ -705,7 +705,7 @@ function FormatRow({
               {isEmbed
                 ? "Открыть плеер"
                 : isStream
-                  ? "Открыть"
+                  ? "Копировать ссылку"
                   : "Скачать"}
             </>
           )}
@@ -780,6 +780,6 @@ function getEmbedUrl(info: VideoInfo): string | null {
 
 const EXAMPLES = [
   { label: "VK Видео", url: "https://vkvideo.ru/video-183207497_456242816" },
-  { label: "Rutube", url: "https://rutube.ru/video/c1f5c5f5e5f5e5f5e5f5e5f5e5f5e5f5/" },
-  { label: "Boosty", url: "https://boosty.to/example/posts/123456" },
+  { label: "Rutube", url: "https://rutube.ru/video/572ca249a0c50ce2b6dc01818de71d5b/" },
+  { label: "Boosty", url: "https://boosty.to/example_user/posts/123456" },
 ];

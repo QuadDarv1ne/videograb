@@ -220,8 +220,8 @@ export async function extractVk(originalUrl: string): Promise<VideoInfo> {
         );
       }
 
-      // Сортировка MP4 по качеству (HLS в конце)
-      formats.sort((a, b) => qualityRank(b.quality) - qualityRank(a.quality));
+      // Сортировка MP4 по убыванию качества (HLS в конце)
+      formats.sort((a, b) => qualityRank(a.quality) - qualityRank(b.quality));
 
       return {
         platform: "vk",
@@ -368,7 +368,7 @@ export async function extractVk(originalUrl: string): Promise<VideoInfo> {
     // MP4 — выше всего
     if (a.ext === "mp4" && b.ext !== "mp4") return -1;
     if (b.ext === "mp4" && a.ext !== "mp4") return 1;
-    return qualityRank(b.quality) - qualityRank(a.quality);
+    return qualityRank(a.quality) - qualityRank(b.quality);
   });
 
   // Если есть хотя бы один реальный формат — возвращаем результат
@@ -400,11 +400,13 @@ export async function extractVk(originalUrl: string): Promise<VideoInfo> {
 /* === Вспомогательные функции === */
 
 function qualityRank(q: string): number {
-  if (q === "HLS") return -1;
-  if (q === "Embed") return -10;
   const num = parseInt(q, 10);
+  // Чем выше разрешение, тем меньше ранг (сортировка по возрастанию ранга)
   if (!isNaN(num)) return 10000 - num;
-  return -100;
+  // Мастер-плейлист и плейлисты-исключения — в самый низ списка
+  if (q === "HLS") return 20000;
+  if (q === "Embed") return 20001;
+  return 99999;
 }
 
 function parseDuration(html: string): number | undefined {
@@ -417,9 +419,13 @@ function parseDuration(html: string): number | undefined {
 }
 
 function extractField(html: string, key: string): string | undefined {
-  const re = new RegExp(`"${key}"\\s*:\\s*"([^"]+)"`);
+  // Значение может содержать экранированные кавычки (\") — поддерживаем их,
+  // чтобы заголовок не обрезался на первой внутренней кавычке.
+  const re = new RegExp(`"${key}"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)"`);
   const m = html.match(re);
-  if (m) return m[1];
+  if (m) {
+    return m[1].replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+  }
   return undefined;
 }
 

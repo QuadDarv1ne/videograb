@@ -103,3 +103,64 @@ Stage Summary:
 - Добавлен встроенный плеер для просмотра онлайн перед скачиванием
 - Создана полная документация проекта (README.md, .env.example, LICENSE)
 - Проект готов к упаковке в архив
+
+---
+Task ID: 4
+Agent: main (Claude)
+Task: Улучшения безопасности, исправление ошибок, SEO-активы
+
+Work Log:
+- Исправлен фейковый Rutube-пример в UI (`EXAMPLES`): заменён на реальный рабочий
+  URL, проверенный через `rutube.ru/api/video/` и `api/play/options` (HLS доступен,
+  acl_access.allowed = true)
+- Исправлена сортировка форматов в `src/lib/extractors/rutube.ts`:
+  раньше "HLS (адаптивный)" и "LIVE" попадали в начало списка; теперь качества
+  идут по убыванию (1080p → 144p), затем мастер-HLS, затем LIVE — согласовано с VK
+- Исправлен `extractField` в `src/lib/extractors/vk.ts`: теперь поддерживает
+  экранированные кавычки (\") внутри JSON-значений — заголовки с кавычками
+  больше не обрезаются
+- `POST /api/extract`:
+  - добавлен rate limiting (sliding window, 20 запросов/мин с IP,
+    настраивается через `RATE_LIMIT_PER_MINUTE`)
+  - `UNSUPPORTED_URL` теперь возвращает 400 вместо 404
+  - лимит размера тела запроса (8 КБ) + проверка Content-Type
+  - 429 с заголовком `Retry-After: 60`
+- Раздел `/api/download` в безопасности:
+  - DNS-резолв каждого хоста (включая редиректы) с проверкой ВСЕХ полученных
+    IPv4/IPv6 на приватные диапазоны — защита от DNS-rebinding (fail-closed)
+  - редиректы вынесены в общую функцию `fetchWithRedirects` (макс. 5, каждый
+    проверяется), HEAD тоже следует редиректам корректно
+  - добавлен `maxDuration = 300`, хост `vkuser.net` в allowlist
+  - нормальный обработчик: "Редирект на небезопасный адрес" → 403,
+    "Слишком много редиректов" → 502
+- `next.config.ts`: `poweredByHeader: false` + security headers
+  (X-Frame-Options DENY, nosniff, Referrer-Policy, Permissions-Policy, COOP)
+- Живое тестирование production-сборки выявило и исправило:
+  - Инвертированная сортировка форматов в vk.ts и rutube.ts: компаратор
+    `rank(b) - rank(a)` ставил 144p в начало списка; исправлено на
+    `rank(a) - rank(b)`, мастер-HLS/LIVE уехали в самый низ списка
+  - Rutube: мастер-плейлист содержал дубликаты каждого качества — добавлен
+    дедуп по паре "разрешение|битрейт"
+  - VK отдаёт MP4 через новый CDN `vkvd*.okcdn.ru` — домен добавлен в
+    allowlist /api/download (без этого скачивание реальное было бы заблокировано)
+  - `POST /api/extract` для Rutube при HTTP 403 теперь возвращает понятное
+    сообщение про антибот-защиту вместо сырой NETWORK_ERROR
+- Создан `public/og-image.png` (1200×630, сгенерирован через sharp) — был
+  заявлен в metadata (openGraph/twitter), но отсутствовал
+- Добавлен `src/app/sitemap.ts` + ссылка на sitemap.xml в `robots.txt`
+- Frontend:
+  - кнопка для HLS-потоков больше не открывает .m3u8 в новой вкладке
+    (браузер скачивал его как текстовый файл) — теперь копирует прямую ссылку
+    и показывает подсказку про yt-dlp/ffmpeg/VLC
+  - исправлен отступ в атрибутах iframe
+- Версия проекта поднята до 0.3.0 (package.json + /api/route.ts)
+- README, .env.example обновлены документацией новых фич
+- ESLint + next build: пройдены без ошибок
+
+Stage Summary:
+- API-роуты защищены: rate limiting на /api/extract, двойная SSRF-защита
+  (allowlist + DNS/приватные IP) на /api/download
+- Заполнены пробелы SEO: og-image.png, sitemap.xml
+- Исправлены реальные баги сортировки форматов, парсинга JSON-полей VK,
+  поведения кнопок HLS
+- Проект готов к production-деплою

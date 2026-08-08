@@ -126,9 +126,17 @@ export async function extractRutube(originalUrl: string): Promise<VideoInfo> {
       }
     );
   } catch (e) {
+    const msg = (e as Error).message;
+    // 403 — антибот-защита или блокировка серверного IP
+    if (/403|forbidden/i.test(msg)) {
+      throw new ExtractorError(
+        "NETWORK_ERROR",
+        "Rutube заблокировал серверный запрос (антибот-защита). Попробуйте позже или проверьте, что видео публичное."
+      );
+    }
     throw new ExtractorError(
       "NETWORK_ERROR",
-      `Не удалось получить данные через API Rutube: ${(e as Error).message}`
+      `Не удалось получить данные через API Rutube: ${msg}`
     );
   }
 
@@ -235,8 +243,13 @@ export async function extractRutube(originalUrl: string): Promise<VideoInfo> {
         headers: { Referer: "https://rutube.ru/" },
       });
       const hlsMaster = parseHlsMaster(master, hlsUrl);
+      const seenVariant = new Set<string>();
       for (const v of hlsMaster.variants) {
         if (seen.has(v.url)) continue;
+        // Дедуп по качеству+битрейту: мастер иногда содержит дубликаты вариантов
+        const key = `${v.resolution}|${v.bandwidth}`;
+        if (seenVariant.has(key)) continue;
+        seenVariant.add(key);
         seen.add(v.url);
         const resLabel = v.resolution || guessResolution(v.bandwidth);
         formats.push({
@@ -252,15 +265,16 @@ export async function extractRutube(originalUrl: string): Promise<VideoInfo> {
     }
   }
 
-  // Сортировка: отдельные качества по убыванию, общий HLS в начале
+  // Сортировка: качества по убыванию (1080p → 144p), общий HLS-мастер и LIVE — внизу
   const qualityRank = (q: string): number => {
-    if (q === "LIVE") return 20000;
-    if (q === "HLS") return 10000;
     const num = parseInt(q, 10);
+    // Чем выше разрешение, тем меньше ранг (восстановление по возрастанию)
     if (!isNaN(num)) return 10000 - num;
-    return -100;
+    if (q === "HLS") return 20000;
+    if (q === "LIVE") return 20001;
+    return 99999;
   };
-  formats.sort((a, b) => qualityRank(b.quality) - qualityRank(a.quality));
+  formats.sort((a, b) => qualityRank(a.quality) - qualityRank(b.quality));
 
   if (formats.length === 0) {
     throw new ExtractorError(
